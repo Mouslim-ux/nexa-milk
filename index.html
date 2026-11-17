@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXA MILK</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--navy:#0a2351;--navy2:#123674;--sky:#3b9cff;--sky2:#e8f2ff;--bg:#f4f8fd;--line:#d8e4f3;--txt:#10223f;--mut:#5d7190;--bad:#c62f3f;--ok:#12805c}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Tahoma,"Noto Sans Arabic",Arial,sans-serif;background:var(--bg);color:var(--txt);padding-bottom:72px}
+header{background:var(--navy);color:#fff;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;position:sticky;top:0;z-index:5}
+.logo{display:flex;align-items:center;gap:8px;font-size:19px;letter-spacing:.5px}.logo svg{width:26px;height:26px}
+.logo.big{justify-content:center;color:var(--navy);font-size:28px;margin-bottom:18px}.logo.big svg{width:42px;height:42px}
+main{padding:14px;max-width:980px;margin:auto}
+nav{position:fixed;bottom:0;inset-inline:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:5}
+nav button{flex:1;border:0;background:none;padding:14px 2px;font:inherit;font-size:13px;color:var(--mut)}
+nav button.on{color:var(--navy);font-weight:700;box-shadow:inset 0 -3px 0 var(--sky)}
+h2{margin:6px 0 12px;font-size:20px;color:var(--navy)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}
+.card small{color:var(--mut);display:block;margin-bottom:6px}.card b{font-size:20px;color:var(--navy)}
+.card.pos b{color:var(--ok)}.card.neg b{color:var(--bad)}
+.box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{background:var(--sky2);color:var(--navy)}
+input,select{font:inherit;padding:9px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;max-width:100%}
+td input{width:96px}
+.btn{background:var(--navy2);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit}
+.btn.sm{padding:6px 12px;font-size:13px}.btn.sky{background:var(--sky)}
+.ghost{background:none;border:1px solid #ffffff66;color:#fff;border-radius:8px;padding:6px 12px;font:inherit}
+.x{border:0;background:#fde8ea;color:var(--bad);border-radius:8px;padding:8px 10px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center}
+.line{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;align-items:center}.line select{flex:1 1 130px}.line input{width:92px}
+.u{color:var(--mut);min-width:48px}
+.login{max-width:340px;margin:12vh auto;padding:0 20px;display:grid;gap:10px}
+.muted{color:var(--mut)}.tot{font-weight:700;color:var(--navy)}
+#toast{position:fixed;top:64px;inset-inline:12px;margin:auto;max-width:520px;padding:12px;border-radius:10px;color:#fff;z-index:9;display:none}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+<script>
+const SUPABASE_URL='https://prxrjlhewnekbugpfdlu.supabase.co';
+const SUPABASE_KEY='sb_publishable_jOSds1-ofYCbLrtyIvzHqg_0g36-cdu';
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=s=>document.querySelector(s);
+const fmt=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DROP='<svg viewBox="0 0 32 32"><path d="M16 2C16 2 5 14 5 21a11 11 0 0 0 22 0C27 14 16 2 16 2z" fill="#3b9cff"/><path d="M11 22l3-6 3 4 2-3 3 5z" fill="#fff"/></svg>';
+let state={suppliers:[],products:[]},lines=[{}],tmr;
+
+function toast(m,err){const t=$('#toast');t.textContent=m;t.style.background=err?'#c62f3f':'#12805c';t.style.display='block';clearTimeout(tmr);tmr=setTimeout(()=>t.style.display='none',4500)}
+function fail(e){toast('خطأ: '+(e.message||e),1);console.error(e)}
+const prod=id=>state.products.find(p=>p.id==id);
+const sup=id=>(state.suppliers.find(s=>s.id==id)||{}).name||'';
+const pu=p=>p.pack_size||1;
+const price=(p,k)=>p[k]==null?'':+(p[k]*pu(p)).toFixed(2);
+const unitLabel=p=>p.pack_size?`${p.pack_name} (${p.pack_size} ${p.unit_name})`:p.unit_name;
+function fq(p,q){q=Number(q||0);if(p.pack_size){const k=Math.floor(q/p.pack_size),r=+(q-k*p.pack_size).toFixed(3);return `${k} ${p.pack_name}`+(r?` و ${r} ${p.unit_name}`:'')}return `${+q.toFixed(3)} ${p.unit_name}`}
+
+function loginView(){$('#app').innerHTML=`<div class="login"><div class="logo big">${DROP}<b>NEXA MILK</b></div><input id="em" type="email" placeholder="البريد الإلكتروني" autocomplete="username"><input id="pw" type="password" placeholder="كلمة المرور" autocomplete="current-password"><button class="btn" onclick="login()">دخول</button></div>`}
+async function login(){const{error}=await db.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});if(error)return toast(error.message==='Invalid login credentials'?'البريد أو كلمة المرور غير صحيحة':'تعذر الاتصال بقاعدة البيانات: '+error.message,1);start()}
+async function logout(){await db.auth.signOut();loginView()}
+
+function shell(){$('#app').innerHTML=`<header><div class="logo">${DROP}<b>NEXA MILK</b></div><button class="ghost" onclick="logout()">خروج</button></header><main id="v"></main><nav>${[['dash','الرئيسية'],['prods','المنتجات'],['buys','المشتريات'],['stock','المخزون'],['sups','المصانع']].map(([t,n])=>`<button data-t="${t}" onclick="go('${t}')">${n}</button>`).join('')}</nav>`}
+async function load(){const[a,b]=await Promise.all([db.from('suppliers').select('*').order('created_at'),db.from('products').select('*').order('created_at')]);if(a.error||b.error)return fail(a.error||b.error);state.suppliers=a.data;state.products=b.data}
+async function start(){shell();const r=await db.rpc('init_nexa');if(r.error)return fail(r.error);await load();go('dash')}
+function go(t){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));({dash,prods,buys,stock,sups})[t]()}
+
+async function dash(){
+ $('#v').innerHTML='<p class="muted">جاري التحميل...</p>';
+ const q=t=>db.from(t).select('*');
+ const R=await Promise.all([q('v_stock'),q('v_supplier_balances'),q('v_customer_balances'),q('v_monthly_summary')]);
+ const e=R.find(r=>r.error);if(e)return fail(e.error);
+ const S=(a,k)=>a.reduce((s,r)=>s+Number(r[k]||0),0);
+ const[st,sb,cb,ms]=R.map(r=>r.data);
+ const net=S(ms,'net_profit');
+ const C=[['إجمالي المشتريات',S(ms,'purchases')],['إجمالي المبيعات',S(ms,'sales')],['الربح الإجمالي',S(ms,'gross_profit')],['المصاريف التشغيلية',S(ms,'operating_expenses')],['صافي الربح',net,net<0?'neg':'pos'],['قيمة المخزون',S(st,'stock_value')],['ديون المحلات',S(cb,'balance')],['ديون المصانع',S(sb,'balance')],['عدد المنتجات',state.products.length],['عدد المحلات',cb.length]];
+ $('#v').innerHTML=`<h2>لوحة التحكم</h2><div class="grid">${C.map(([l,v,c])=>`<div class="card ${c||''}"><small>${l}</small><b>${fmt(v)}</b></div>`).join('')}</div><p class="muted">الربح الإجمالي محسوب من تكلفة البضاعة المباعة، ثم تُخصم المصاريف وأجور الحمال للوصول إلى صافي الربح.</p>`}
+
+function prods(){
+ const rows=state.products.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(unitLabel(p))}</td><td><select id="su_${p.id}"><option value="">—</option>${state.suppliers.map(s=>`<option value="${s.id}" ${s.id==p.supplier_id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></td><td><input id="b_${p.id}" type="number" step="any" min="0" value="${price(p,'buy_price')}"></td><td><input id="s_${p.id}" type="number" step="any" min="0" value="${price(p,'sell_price')}"></td><td><button class="btn sm" onclick="saveProd('${p.id}')">حفظ</button> <button class="x" onclick="delProd('${p.id}')">حذف</button></td></tr>`).join('');
+ $('#v').innerHTML=`<h2>المنتجات</h2><div class="box tw"><table><tr><th>المنتج</th><th>وحدة الشراء والبيع</th><th>المصنع</th><th>سعر الشراء</th><th>سعر البيع</th><th></th></tr>${rows}</table><p class="muted">الأسعار لكل وحدة مذكورة في العمود الثاني (صندوق أو كغ). أدخلها أنت، لا توجد أسعار افتراضية.</p></div>
+ <div class="box"><b>إضافة منتج</b><div class="row" style="margin-top:8px"><input id="n_name" placeholder="اسم المنتج"><select id="n_unit"><option value="صندوق">بالصندوق</option><option value="كغ">بالكيلوغرام</option><option value="كيس">بالكيس داخل صندوق</option></select><input id="n_pack" type="number" min="2" placeholder="عدد الأكياس في الصندوق" style="width:190px"><button class="btn" onclick="addProd()">إضافة</button></div></div>`}
+async function saveProd(id){const p=prod(id),n=v=>v===''?null:+v/pu(p);const b=n($('#b_'+id).value),s=n($('#s_'+id).value);const{error}=await db.from('products').update({supplier_id:$('#su_'+id).value||null,buy_price:b,sell_price:s}).eq('id',id);if(error)return fail(error);await load();toast('تم الحفظ');prods()}
+async function delProd(id){if(!confirm('حذف هذا المنتج؟ لن يُحذف إن كانت له عمليات مسجلة.'))return;const{error}=await db.from('products').delete().eq('id',id);if(error)return toast('لا يمكن حذف منتج له عمليات مسجلة، لتحافظ على السجل المالي.',1);await load();prods()}
+async function addProd(){const name=$('#n_name').value.trim(),u=$('#n_unit').value,k=+$('#n_pack').value;if(!name)return toast('اكتب اسم المنتج',1);if(u==='كيس'&&!(k>1))return toast('اكتب عدد الأكياس في الصندوق',1);const row={name,unit_name:u};if(u==='كيس'){row.pack_name='صندوق';row.pack_size=k}const{error}=await db.from('products').insert(row);if(error)return fail(error);await load();toast('تمت الإضافة');prods()}
+
+function sups(){
+ db.from('v_supplier_balances').select('*').then(({data,error})=>{if(error)return fail(error);
+ $('#v').innerHTML=`<h2>المصانع والموردون</h2><div class="box tw"><table><tr><th>المصنع</th><th>إجمالي المشتريات</th><th>المدفوع</th><th>الدين المتبقي</th></tr>${data.map(r=>`<tr><td>${esc(r.name)}</td><td>${fmt(r.total_purchases)}</td><td>${fmt(r.total_paid)}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</table></div><div class="box"><b>إضافة مصنع</b><div class="row" style="margin-top:8px"><input id="s_name" placeholder="اسم المصنع"><input id="s_phone" placeholder="الهاتف (اختياري)"><button class="btn" onclick="addSup()">إضافة</button></div></div>`})}
+async function addSup(){const name=$('#s_name').value.trim();if(!name)return toast('اكتب اسم المصنع',1);const{error}=await db.from('suppliers').insert({name,phone:$('#s_phone').value||null});if(error)return fail(error);await load();toast('تمت الإضافة');sups()}
+
+function lineHTML(l,i){const p=prod(l.pid);
+ const u=p&&p.pack_size?`<select onchange="L(${i},'unit',this.value)"><option value="pack" ${l.unit!=='base'?'selected':''}>${esc(p.pack_name)}</option><option value="base" ${l.unit==='base'?'selected':''}>${esc(p.unit_name)}</option></select>`:`<span class="u">${p?esc(p.unit_name):''}</span>`;
+ return `<div class="line"><select onchange="pick(${i},this.value)"><option value="">اختر المنتج</option>${state.products.map(x=>`<option value="${x.id}" ${x.id==l.pid?'selected':''}>${esc(x.name)}</option>`).join('')}</select><input type="number" step="any" min="0" placeholder="الكمية" value="${l.qty??''}" oninput="L(${i},'qty',+this.value)">${u}<input type="number" step="any" min="0" placeholder="السعر" value="${l.price??''}" oninput="L(${i},'price',this.value===''?null:+this.value)"><button class="x" onclick="lines.splice(${i},1);if(!lines.length)lines=[{}];formRender()">✕</button></div>`}
+function mult(l){const p=prod(l.pid);return p&&p.pack_size&&l.unit!=='base'?p.pack_size:1}
+function defPrice(l){const p=prod(l.pid);return p&&p.buy_price!=null?+(p.buy_price*mult(l)).toFixed(2):null}
+function pick(i,v){lines[i]={pid:v,unit:'pack'};lines[i].price=defPrice(lines[i]);formRender()}
+function L(i,k,v){lines[i][k]=v;if(k==='unit'){lines[i].price=defPrice(lines[i]);formRender()}else totRender()}
+function totRender(){const t=lines.reduce((s,l)=>s+(l.qty>0&&l.price>=0?l.qty*l.price:0),0);$('#tot').textContent=fmt(t)}
+function formRender(){$('#lines').innerHTML=lines.map(lineHTML).join('');totRender()}
+async function buys(){
+ $('#v').innerHTML=`<h2>المشتريات</h2><div class="box"><b>فاتورة شراء جديدة</b><div class="row" style="margin-top:8px"><select id="p_sup">${state.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select><input id="p_date" type="date" value="${new Date().toISOString().slice(0,10)}"><input id="p_ref" placeholder="رقم الفاتورة (اختياري)"></div><div id="lines"></div><button class="btn sky sm" onclick="lines.push({});formRender()">+ منتج آخر</button><p>الإجمالي: <span id="tot" class="tot">0</span></p><div class="row"><input id="p_paid" type="number" step="any" min="0" placeholder="المبلغ المدفوع الآن"><button class="btn" onclick="savePurchase()">حفظ الفاتورة</button></div></div><div class="box tw" id="plist"><p class="muted">جاري التحميل...</p></div>`;
+ formRender();
+ const{data,error}=await db.from('v_purchases').select('*').order('purchase_date',{ascending:false}).limit(30);if(error)return fail(error);
+ $('#plist').innerHTML=`<b>آخر المشتريات</b><table><tr><th>التاريخ</th><th>المصنع</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th></tr>${data.map(r=>`<tr><td>${r.purchase_date}</td><td>${esc(sup(r.supplier_id))}</td><td>${fmt(r.total)}</td><td>${fmt(r.paid)}</td><td>${fmt(r.remaining)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">لا توجد مشتريات بعد.</td></tr>'}</table>`}
+async function savePurchase(){
+ const sid=$('#p_sup').value,date=$('#p_date').value,paid=+$('#p_paid').value||0;
+ const Ls=lines.filter(l=>l.pid&&l.qty>0);
+ if(!sid||!Ls.length)return toast('اختر المصنع وأضف منتجاً بكمية',1);
+ if(Ls.some(l=>l.price==null||l.price<0))return toast('أدخل سعر الشراء لكل منتج',1);
+ const{data:pu0,error}=await db.from('purchases').insert({supplier_id:sid,purchase_date:date,invoice_ref:$('#p_ref').value||null}).select().single();
+ if(error)return fail(error);
+ const items=Ls.map(l=>{const m=mult(l);return{purchase_id:pu0.id,product_id:l.pid,qty:l.qty*m,unit_price:l.price/m}});
+ let r=await db.from('purchase_items').insert(items);
+ if(r.error){await db.from('purchases').delete().eq('id',pu0.id);return fail(r.error)}
+ if(paid>0){r=await db.from('supplier_payments').insert({supplier_id:sid,purchase_id:pu0.id,pay_date:date,amount:paid});if(r.error)return toast('حُفظت الفاتورة لكن فشل تسجيل الدفعة: '+r.error.message,1)}
+ toast('تم حفظ الفاتورة');lines=[{}];buys()}
+
+async function stock(){
+ $('#v').innerHTML='<p class="muted">جاري التحميل...</p>';
+ const{data,error}=await db.from('v_stock').select('*');if(error)return fail(error);
+ $('#v').innerHTML=`<h2>المخزون والشاحنة</h2><div class="box tw"><table><tr><th>المنتج</th><th>المحمّل من المصانع</th><th>الموزع على المحلات</th><th>التالف أو المفقود</th><th>المتبقي في الشاحنة</th><th>القيمة</th></tr>${data.map(r=>{const p=prod(r.product_id)||r;return`<tr><td>${esc(r.name)}</td><td>${fq(p,r.received)}</td><td>${fq(p,r.sold)}</td><td>${fq(p,r.damaged_lost)}</td><td><b>${fq(p,r.remaining)}</b></td><td>${fmt(r.stock_value)}</td></tr>`}).join('')}</table></div>`}
+
+(async()=>{const{data:{session}}=await db.auth.getSession();session?start():loginView()})();
+</script>
+</body>
+</html>
